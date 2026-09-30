@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>经典诺基亚《摩天大楼》（Tower Bloxx）复刻版</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏢</text></svg>">
+</head>
+<body>
+
+  <!-- 顶部控制与视图切换工具栏 -->
+  <nav class="top-nav">
+    <button id="toggleFrameBtn" class="nav-btn active" title="在经典诺基亚手机外壳与全屏模式间切换">📱 诺基亚机身: 开</button>
+    <button id="toggleSoundBtn" class="nav-btn active" title="开关游戏音效">🔊 音效: 开</button>
+    <button id="toggleBgmBtn" class="nav-btn active" title="开关背景音乐">🎵 音乐: 开</button>
+  </nav>
+
+  <!-- 诺基亚经典机身容器 -->
+  <main id="deviceContainer" class="phone-casing">
+    
+    <!-- 顶部听筒与 NOKIA 标志 -->
+    <header class="phone-top-bar">
+      <div class="earpiece"></div>
+      <div class="nokia-logo">NOKIA</div>
+    </header>
+
+    <!-- 游戏屏幕视口 -->
+    <section class="screen-wrapper">
+      <canvas id="gameCanvas"></canvas>
+    </section>
+
+    <!-- 经典实体键盘区域 -->
+    <section id="nokiaKeypad" class="keypad-container">
+      
+      <!-- 软键与五向导航键 -->
+      <div class="dpad-row">
+        <!-- 左功能键 -->
+        <button class="soft-key call-btn" data-action="left-soft" title="选择/开始/投掷">
+          <span>SELECT</span>
+          <span style="font-size: 8px;">拨号</span>
+        </button>
+
+        <!-- 五向键 -->
+        <div class="dpad-cluster">
+          <button class="dpad-btn dpad-up" data-action="up">▲</button>
+          <button class="dpad-btn dpad-down" data-action="down">▼</button>
+          <button class="dpad-btn dpad-left" data-action="left">◀</button>
+          <button class="dpad-btn dpad-right" data-action="right">▶</button>
+          <!-- 中心确定键 (直接触发掉落) -->
+          <button class="dpad-center" data-action="center" title="点击释放方块">OK</button>
+        </div>
+
+        <!-- 右功能键 (静音/返回) -->
+        <button class="soft-key end-btn" data-action="right-soft" title="挂断/音效切换">
+          <span>MUTE</span>
+          <span style="font-size: 8px;">挂断</span>
+        </button>
+      </div>
+
+      <!-- 3x4 经典九宫格按键 -->
+      <div class="num-grid">
+        <button class="key" data-key="1">
+          <span class="num">1</span>
+          <span class="letters">.@_</span>
+        </button>
+        <button class="key" data-key="2">
+          <span class="num">2</span>
+          <span class="letters">abc</span>
+        </button>
+        <button class="key" data-key="3">
+          <span class="num">3</span>
+          <span class="letters">def</span>
+        </button>
+
+        <button class="key" data-key="4">
+          <span class="num">4</span>
+          <span class="letters">ghi</span>
+        </button>
+        <!-- 核心投掷按键 5 号键 -->
+        <button class="key" data-key="5" data-action="drop" title="经典核心下落按键: 按 5 掉落">
+          <span class="num">5</span>
+          <span class="letters">jkl</span>
+        </button>
+        <button class="key" data-key="6">
+          <span class="num">6</span>
+          <span class="letters">mno</span>
+        </button>
+
+        <button class="key" data-key="7">
+          <span class="num">7</span>
+          <span class="letters">pqrs</span>
+        </button>
+        <button class="key" data-key="8">
+          <span class="num">8</span>
+          <span class="letters">tuv</span>
+        </button>
+        <button class="key" data-key="9">
+          <span class="num">9</span>
+          <span class="letters">wxyz</span>
+        </button>
+
+        <button class="key" data-key="*">
+          <span class="num">*</span>
+          <span class="letters">+</span>
+        </button>
+        <button class="key" data-key="0">
+          <span class="num">0</span>
+          <span class="letters">␣</span>
+        </button>
+        <button class="key" data-key="#">
+          <span class="num">#</span>
+          <span class="letters">⇧</span>
+        </button>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- 底部快捷按键小贴士 -->
+  <footer class="footer-tips">
+    <p>💡 提示: 支持键盘 <kbd>Space 空格</kbd>、<kbd>数字键 5</kbd> 或点击屏幕/按键下落方块</p>
+    <p style="margin-top: 4px;">快捷键: <kbd>M</kbd> 静音 | <kbd>B</kbd> 音乐 | <kbd>F</kbd> 切换机身</p>
+  </footer>
+
+  <!-- 游戏主入口脚本 -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

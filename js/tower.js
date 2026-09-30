@@ -1,0 +1,182 @@
+// js/tower.js - 大楼层叠结构、质心偏移动力学与阻尼摆动模拟
+
+import { Block, BLOCK_WIDTH, BLOCK_HEIGHT } from './block.js';
+
+export class Tower {
+  constructor(baseX, groundY) {
+    this.baseX = baseX;
+    this.groundY = groundY;
+    this.blocks = [];
+    
+    // 大楼弹性摆动物理参数 (反向阻尼摆)
+    this.swayAngle = 0;          // 当前倾角
+    this.swayVelocity = 0;       // 摆动角速度
+    this.swayStiffness = 14.0;   // 结构刚度 (回弹系数)
+    this.swayDamping = 2.2;      // 阻尼系数 (能量衰减)
+
+    this.population = 0;
+    this.combo = 0;
+    this.maxCombo = 0;
+
+    this.reset();
+  }
+
+  reset() {
+    this.blocks = [];
+    this.swayAngle = 0;
+    this.swayVelocity = 0;
+    this.population = 0;
+    this.combo = 0;
+    this.maxCombo = 0;
+
+    // 放置最底部的基座大堂
+    const foundation = new Block('foundation', 0);
+    foundation.x = this.baseX;
+    foundation.y = this.groundY - BLOCK_HEIGHT / 2;
+    foundation.status = 'landed';
+    foundation.offsetFromLower = 0;
+    this.blocks.push(foundation);
+  }
+
+  getTopBlock() {
+    return this.blocks[this.blocks.length - 1];
+  }
+
+  getFloorCount() {
+    return this.blocks.length - 1; // 扣除地基
+  }
+
+  // 计算大楼当前顶部的全局绝对物理位置
+  getTopSurfacePosition() {
+    const topBlock = this.getTopBlock();
+    const count = this.blocks.length;
+    // 越高的大楼，顶部受当前摆角倾斜位移越大
+    const swayOffsetX = Math.sin(this.swayAngle) * (count * (BLOCK_HEIGHT * 0.7));
+    return {
+      x: topBlock.x + swayOffsetX,
+      y: topBlock.y - BLOCK_HEIGHT / 2,
+      rawTopBlock: topBlock
+    };
+  }
+
+  // 物理更新（阻尼振动方程）
+  update(dt, wind = 0) {
+    // 质心恢复力加速度 = -k * angle - c * v + 外力(风力微扰)
+    const count = this.blocks.length;
+    // 楼层越高，摆动周期略长，晃动更灵敏
+    const effectiveStiffness = Math.max(3.5, this.swayStiffness - count * 0.12);
+    const acceleration = -effectiveStiffness * this.swayAngle - this.swayDamping * this.swayVelocity + (wind * 0.08);
+
+    this.swayVelocity += acceleration * dt;
+    this.swayAngle += this.swayVelocity * dt;
+
+    // 限制最大摆动角度防止过度穿模失真
+    this.swayAngle = Math.max(-0.25, Math.min(0.25, this.swayAngle));
+  }
+
+  // 判定掉落方块的着陆对齐情况
+  checkLanding(fallingBlock) {
+    const topPos = this.getTopSurfacePosition();
+    const blockBottomY = fallingBlock.y + BLOCK_HEIGHT / 2;
+
+    // 检测垂直碰撞 (下边缘触及或穿过上一层的上边缘)
+    if (blockBottomY >= topPos.y && fallingBlock.y < topPos.y + BLOCK_HEIGHT / 2) {
+      const deltaX = fallingBlock.x - topPos.x;
+      const absDelta = Math.abs(deltaX);
+
+      // 1. 完美判定 (Perfect!) - 偏差小于等于 5 像素
+      if (absDelta <= 5) {
+        this.combo++;
+        if (this.combo > this.maxCombo) this.maxCombo = this.combo;
+
+        // 完美对齐极大吸收晃动能量，稳定大楼
+        this.swayVelocity *= 0.15;
+        this.swayAngle *= 0.2;
+
+        const popBonus = 100 + (this.combo - 1) * 50;
+        this.population += popBonus;
+
+        this.attachBlock(fallingBlock, topPos.x, topPos.y - BLOCK_HEIGHT / 2, 0);
+        fallingBlock.addResidents(3);
+
+        return {
+          type: 'perfect',
+          combo: this.combo,
+          popGained: popBonus,
+          deltaX: deltaX
+        };
+      }
+
+      // 2. 普通着陆 (Good / OK) - 偏差在允许重叠宽度内
+      const maxAllowedOffset = BLOCK_WIDTH * 0.44;
+      if (absDelta <= maxAllowedOffset) {
+        this.combo = 0;
+
+        // 偏差造成偏心力矩冲量，激发大楼摇晃
+        const impulseDirection = deltaX > 0 ? 1 : -1;
+        const impulseIntensity = (absDelta / maxAllowedOffset) * 0.55;
+        this.swayVelocity += impulseDirection * impulseIntensity;
+
+        // 依据对齐精准度折算入住人口 (40 ~ 90人)
+        const accuracy = 1.0 - (absDelta / maxAllowedOffset);
+        const popGained = Math.round(40 + accuracy * 50);
+        this.population += popGained;
+
+        this.attachBlock(fallingBlock, fallingBlock.x, topPos.y - BLOCK_HEIGHT / 2, deltaX);
+        fallingBlock.addResidents(accuracy > 0.5 ? 2 : 1);
+
+        return {
+          type: absDelta <= 16 ? 'good' : 'ok',
+          combo: 0,
+          popGained: popGained,
+          deltaX: deltaX
+        };
+      }
+
+      // 3. 严重错位滑落 (Miss)
+      fallingBlock.status = 'tumbling';
+      fallingBlock.vRotation = deltaX > 0 ? 5.5 : -5.5;
+      fallingBlock.vx = (deltaX > 0 ? 1 : -1) * (140 + Math.random() * 60);
+
+      this.combo = 0;
+      return {
+        type: 'miss',
+        deltaX: deltaX
+      };
+    }
+
+    return null; // 仍在下落途中
+  }
+
+  // 固化新方块到大楼上
+  attachBlock(block, finalX, finalY, offset) {
+    block.status = 'landed';
+    block.x = finalX;
+    block.y = finalY;
+    block.offsetFromLower = offset;
+    block.rotation = 0;
+    this.blocks.push(block);
+  }
+
+  draw(ctx, cameraY) {
+    const count = this.blocks.length;
+
+    // 从底部到顶部依次绘制所有楼层
+    for (let i = 0; i < count; i++) {
+      const block = this.blocks[i];
+      // 高度比例 ratio 从 0 (地基) 到 1 (顶层)
+      const heightRatio = i / Math.max(1, count - 1);
+      // 随着楼层越高，随大楼弹性角度产生渐进侧弯 (曲率分布)
+      const currentFloorAngle = this.swayAngle * (heightRatio * 0.9);
+      const swayOffset = Math.sin(this.swayAngle) * (i * BLOCK_HEIGHT * 0.65);
+
+      const renderX = block.x + swayOffset;
+      const renderY = block.y - cameraY;
+
+      // 仅在可视视野范围内的楼层进行细致渲染优化
+      if (renderY > -100 && renderY < ctx.canvas.height + 100) {
+        block.draw(ctx, renderX, renderY, currentFloorAngle);
+      }
+    }
+  }
+}
