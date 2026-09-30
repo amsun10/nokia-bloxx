@@ -408,30 +408,47 @@ export class Game {
         curX += bw;
       }
 
-      // 2. 近景绿地草坪
+      // 2. 近景绿地草坪（无缝紧贴大楼地基底部 groundScreenY）
       ctx.fillStyle = '#27ae60';
-      ctx.fillRect(0, groundScreenY + 28, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.fillRect(0, groundScreenY, CANVAS_WIDTH, CANVAS_HEIGHT);
       ctx.fillStyle = '#2ecc71';
-      ctx.fillRect(0, groundScreenY + 28, CANVAS_WIDTH, 4);
+      ctx.fillRect(0, groundScreenY, CANVAS_WIDTH, 4);
 
-      // 地面公路
+      // 大楼正门前大理石迎宾铺地与台阶
+      const hotelW = 126;
+      ctx.fillStyle = '#95a5a6';
+      ctx.fillRect((CANVAS_WIDTH - hotelW) / 2, groundScreenY, hotelW, 16);
+      ctx.fillStyle = '#7f8c8d';
+      ctx.fillRect((CANVAS_WIDTH - hotelW) / 2, groundScreenY + 4, hotelW, 1);
+      ctx.fillRect((CANVAS_WIDTH - hotelW) / 2, groundScreenY + 9, hotelW, 1);
+
+      // 地面沥青公路
       ctx.fillStyle = '#34495e';
-      ctx.fillRect(0, groundScreenY + 44, CANVAS_WIDTH, 24);
-      // 公路白虚线
+      ctx.fillRect(0, groundScreenY + 18, CANVAS_WIDTH, 42);
+      // 马路路沿石 (Curbs)
+      ctx.fillStyle = '#bdc3c7';
+      ctx.fillRect(0, groundScreenY + 16, CANVAS_WIDTH, 2);
+
+      // 公路白色交通标线
       ctx.fillStyle = '#ecf0f1';
       for (let x = 10; x < CANVAS_WIDTH; x += 30) {
-        ctx.fillRect(x, groundScreenY + 54, 15, 3);
+        ctx.fillRect(x, groundScreenY + 36, 16, 3);
       }
 
-      // 地面小行道树
-      for (let tx of [30, 75, CANVAS_WIDTH - 85, CANVAS_WIDTH - 35]) {
+      // 地面小行道树（自然植根于草坪之上）
+      for (let tx of [26, 68, CANVAS_WIDTH - 68, CANVAS_WIDTH - 26]) {
         // 树干
         ctx.fillStyle = '#795548';
-        ctx.fillRect(tx - 3, groundScreenY + 6, 6, 24);
+        ctx.fillRect(tx - 3, groundScreenY - 18, 6, 20);
         // 树冠
         ctx.fillStyle = '#2e7d32';
         ctx.beginPath();
-        ctx.arc(tx, groundScreenY + 6, 14, 0, Math.PI * 2);
+        ctx.arc(tx, groundScreenY - 22, 14, 0, Math.PI * 2);
+        ctx.fill();
+        // 树冠高光层次
+        ctx.fillStyle = '#43a047';
+        ctx.beginPath();
+        ctx.arc(tx - 3, groundScreenY - 25, 8, 0, Math.PI * 2);
         ctx.fill();
       }
     }
