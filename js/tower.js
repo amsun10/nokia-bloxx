@@ -48,16 +48,21 @@ export class Tower {
     return this.blocks.length - 1; // 扣除地基
   }
 
-  // 计算大楼当前顶部的全局绝对物理位置
+  // 获取指定楼层在给定摆动角度下的动态横向位移 (与渲染端统一)
+  getFloorSwayOffset(floorIndex, angle = this.swayAngle) {
+    return Math.sin(angle) * (floorIndex * BLOCK_HEIGHT * 0.65);
+  }
+
+  // 计算大楼当前顶部的全局绝对物理位置与视觉表面
   getTopSurfacePosition() {
-    const topBlock = this.getTopBlock();
-    const count = this.blocks.length;
-    // 越高的大楼，顶部受当前摆角倾斜位移越大
-    const swayOffsetX = Math.sin(this.swayAngle) * (count * (BLOCK_HEIGHT * 0.7));
+    const topIndex = this.blocks.length - 1;
+    const topBlock = this.blocks[topIndex];
+    const swayOffsetX = this.getFloorSwayOffset(topIndex, this.swayAngle);
     return {
       x: topBlock.x + swayOffsetX,
       y: topBlock.y - BLOCK_HEIGHT / 2,
-      rawTopBlock: topBlock
+      rawTopBlock: topBlock,
+      topIndex: topIndex
     };
   }
 
@@ -165,8 +170,8 @@ export class Tower {
       const deltaX = fallingBlock.x - topPos.x;
       const absDelta = Math.abs(deltaX);
 
-      // 1. 完美判定 (Perfect!) - 偏差小于等于 6 像素
-      if (absDelta <= 6) {
+      // 1. 严格完美判定 (Perfect!) - 偏差必须严格在极小视觉缝隙内 (<= 2.2 像素，肉眼完全严丝合缝)
+      if (absDelta <= 2.2) {
         this.combo++;
         if (this.combo > this.maxCombo) this.maxCombo = this.combo;
 
@@ -177,7 +182,10 @@ export class Tower {
         const popBonus = 100 + (this.combo - 1) * 50;
         this.population += popBonus;
 
-        this.attachBlock(fallingBlock, topPos.x, topPos.y - BLOCK_HEIGHT / 2, 0);
+        // 完美对齐：静态绝对基准与下层方块完全重合 (0 偏差严丝合缝，不受摆动位移污染)
+        const restX = topPos.rawTopBlock.x;
+        const restY = topPos.rawTopBlock.y - BLOCK_HEIGHT;
+        this.attachBlock(fallingBlock, restX, restY, 0);
         fallingBlock.addResidents(3);
 
         return {
@@ -203,11 +211,14 @@ export class Tower {
         const popGained = Math.round(40 + accuracy * 50);
         this.population += popGained;
 
-        this.attachBlock(fallingBlock, fallingBlock.x, topPos.y - BLOCK_HEIGHT / 2, deltaX);
+        // 非完美着陆：静态绝对坐标为下层方块绝对坐标加上本次实际偏差 (消除动态摆角污染)
+        const restX = topPos.rawTopBlock.x + deltaX;
+        const restY = topPos.rawTopBlock.y - BLOCK_HEIGHT;
+        this.attachBlock(fallingBlock, restX, restY, deltaX);
         fallingBlock.addResidents(accuracy > 0.5 ? 2 : 1);
 
         return {
-          type: absDelta <= 16 ? 'good' : 'ok',
+          type: absDelta <= 10 ? 'good' : 'ok',
           combo: 0,
           popGained: popGained,
           deltaX: deltaX
@@ -262,7 +273,7 @@ export class Tower {
       const heightRatio = i / Math.max(1, count - 1);
       // 随着楼层越高，随大楼弹性角度产生渐进侧弯 (曲率分布)
       const currentFloorAngle = this.swayAngle * (heightRatio * 0.9);
-      const swayOffset = Math.sin(this.swayAngle) * (i * BLOCK_HEIGHT * 0.65);
+      const swayOffset = this.getFloorSwayOffset(i, this.swayAngle);
 
       const renderX = block.x + swayOffset - cameraX;
       const renderY = block.y - cameraY;

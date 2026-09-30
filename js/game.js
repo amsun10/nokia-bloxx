@@ -54,14 +54,29 @@ export class Game {
 
   initClouds() {
     this.clouds = [];
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 11; i++) {
+      const w = 75 + Math.random() * 45;
+      const h = 26 + Math.random() * 8;
+      // 8个多向波峰参数 (纯圆球复合，坚决不用 roundRect，彻底消除平底与直线边缘)
+      const puffs = [
+        [-0.20 + (Math.random() - 0.5) * 0.06, -0.18 + (Math.random() - 0.5) * 0.05, 0.58 + Math.random() * 0.08], // 左上峰
+        [ 0.06 + (Math.random() - 0.5) * 0.06, -0.28 + (Math.random() - 0.5) * 0.06, 0.70 + Math.random() * 0.08], // 主顶峰
+        [ 0.28 + (Math.random() - 0.5) * 0.06, -0.14 + (Math.random() - 0.5) * 0.05, 0.52 + Math.random() * 0.06], // 右上峰
+        [-0.42 + (Math.random() - 0.5) * 0.05,  0.08 + (Math.random() - 0.5) * 0.04, 0.40 + Math.random() * 0.06], // 左翼
+        [ 0.42 + (Math.random() - 0.5) * 0.05,  0.10 + (Math.random() - 0.5) * 0.04, 0.38 + Math.random() * 0.06], // 右翼
+        [-0.26 + (Math.random() - 0.5) * 0.06,  0.16 + (Math.random() - 0.5) * 0.04, 0.50 + Math.random() * 0.06], // 底左弧
+        [ 0.02 + (Math.random() - 0.5) * 0.06,  0.18 + (Math.random() - 0.5) * 0.04, 0.54 + Math.random() * 0.06], // 底中弧
+        [ 0.26 + (Math.random() - 0.5) * 0.06,  0.16 + (Math.random() - 0.5) * 0.04, 0.48 + Math.random() * 0.06]  // 底右弧
+      ];
+
       this.clouds.push({
-        x: Math.random() * (CANVAS_WIDTH + 200) - 100,
-        y: -i * 180 + 100, // 分布在不同高度层
-        speed: 12 + Math.random() * 20,
-        w: 50 + Math.random() * 50,
-        h: 22 + Math.random() * 15,
-        alpha: 0.5 + Math.random() * 0.4
+        x: Math.random() * (CANVAS_WIDTH + 260) - 130,
+        y: -i * 155 + 80,
+        speed: 7 + Math.random() * 12,
+        w: w,
+        h: h,
+        alpha: 0.85 + Math.random() * 0.12,
+        puffs: puffs
       });
     }
   }
@@ -152,8 +167,8 @@ export class Game {
     // 2. 更新背景云层
     for (const c of this.clouds) {
       c.x += (c.speed + this.wind * 15) * dt;
-      if (c.x > CANVAS_WIDTH + 80) c.x = -80;
-      if (c.x < -80) c.x = CANVAS_WIDTH + 80;
+      if (c.x > CANVAS_WIDTH + 140) c.x = -140;
+      if (c.x < -140) c.x = CANVAS_WIDTH + 140;
     }
 
     // 3. 更新粒子系统
@@ -338,70 +353,151 @@ export class Game {
     ctx.restore();
   }
 
-  // 绘制动态多段渐变天空
-  drawSkyBackground(ctx) {
-    const heightProgress = Math.max(0, -this.cameraY / 1500); // 0=地面, 1=高空, 2=太空
-    const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+  // 辅助颜色线性插值
+  lerpColor(c1, c2, t) {
+    const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
+    const g = Math.round(c1[1] + (c2[1] - c1[1]) * t);
+    const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
+    return `rgb(${r},${g},${b})`;
+  }
 
-    if (heightProgress < 0.6) {
-      // 地面日间天蓝色
-      grad.addColorStop(0, '#3498db');
-      grad.addColorStop(0.6, '#5dade2');
-      grad.addColorStop(1, '#aed6f1');
-    } else if (heightProgress < 1.4) {
-      // 傍晚霞光与晚霞紫橙
-      const p = (heightProgress - 0.6) / 0.8;
-      grad.addColorStop(0, '#2c3e50');
-      grad.addColorStop(0.5, '#8e44ad');
-      grad.addColorStop(1, '#e67e22');
-    } else {
-      // 深空暗夜与繁星
-      grad.addColorStop(0, '#0a0d1a');
-      grad.addColorStop(0.5, '#151932');
-      grad.addColorStop(1, '#2c3e50');
+  // 获取高度对应的平滑渐变色彩系统 (消除阶段性突兀切变与刺眼紫带)
+  getSkyColors(progress) {
+    // 关键高度帧 (progress: 0=地面, 0.4=高空, 0.85=夕阳霞光, 1.4+=深邃夜空)
+    const stops = [
+      { p: 0.0, top: [52, 152, 219], mid: [133, 193, 233], btm: [212, 239, 252] }, // 晴朗碧空
+      { p: 0.4, top: [55, 125, 185], mid: [135, 175, 215], btm: [250, 215, 175] }, // 午后向晚微金
+      { p: 0.85, top: [44, 62, 105], mid: [142, 95, 125],  btm: [238, 142, 85]  }, // 暮色霞光 (柔和莫兰迪紫红与暖橙，无生硬高饱和紫带)
+      { p: 1.4, top: [12, 16, 28],   mid: [24, 32, 54],    btm: [42, 55, 82]    }  // 静谧星夜
+    ];
+
+    const toStr = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
+
+    if (progress <= stops[0].p) {
+      return {
+        top: toStr(stops[0].top),
+        mid: toStr(stops[0].mid),
+        btm: toStr(stops[0].btm),
+        sunsetRatio: 0
+      };
     }
+    if (progress >= stops[stops.length - 1].p) {
+      const last = stops[stops.length - 1];
+      return {
+        top: toStr(last.top),
+        mid: toStr(last.mid),
+        btm: toStr(last.btm),
+        sunsetRatio: 0
+      };
+    }
+
+    for (let i = 0; i < stops.length - 1; i++) {
+      const s1 = stops[i];
+      const s2 = stops[i + 1];
+      if (progress >= s1.p && progress <= s2.p) {
+        const t = (progress - s1.p) / (s2.p - s1.p);
+        const sunsetRatio = Math.max(0, 1 - Math.abs(progress - 0.85) / 0.45);
+        return {
+          top: this.lerpColor(s1.top, s2.top, t),
+          mid: this.lerpColor(s1.mid, s2.mid, t),
+          btm: this.lerpColor(s1.btm, s2.btm, t),
+          sunsetRatio: sunsetRatio
+        };
+      }
+    }
+  }
+
+  // 绘制动态多段无缝渐变天空与高空天体
+  drawSkyBackground(ctx) {
+    const heightProgress = Math.max(0, -this.cameraY / 1400);
+    const sky = this.getSkyColors(heightProgress);
+
+    const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    grad.addColorStop(0, sky.top);
+    grad.addColorStop(0.55, sky.mid);
+    grad.addColorStop(1, sky.btm);
 
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // 绘制高空繁星
-    if (heightProgress > 0.8) {
-      ctx.fillStyle = '#ffffff';
+    // 渐进式淡入高空繁星与皎洁月亮
+    const starAlpha = Math.min(1.0, Math.max(0, (heightProgress - 0.7) / 0.5));
+    if (starAlpha > 0) {
+      ctx.save();
+      const now = performance.now();
       for (const s of this.stars) {
         const starY = s.y - this.cameraY * 0.2;
         if (starY >= 0 && starY <= CANVAS_HEIGHT) {
+          const twinkle = 0.5 + 0.5 * Math.sin(now * 0.003 * s.twinkleSpeed);
+          ctx.fillStyle = `rgba(255, 255, 255, ${starAlpha * twinkle})`;
           ctx.beginPath();
           ctx.arc(s.x, starY, s.size, 0, Math.PI * 2);
           ctx.fill();
         }
       }
-      // 弯月
-      ctx.fillStyle = '#f1c40f';
+
+      // 月牙 (与当前天空顶部色调自然剪裁融合)
+      ctx.fillStyle = `rgba(253, 242, 208, ${starAlpha})`;
       ctx.beginPath();
-      ctx.arc(CANVAS_WIDTH - 45, 75, 18, 0, Math.PI * 2);
+      ctx.arc(CANVAS_WIDTH - 45, 75, 17, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#151932';
+      ctx.fillStyle = sky.top;
       ctx.beginPath();
-      ctx.arc(CANVAS_WIDTH - 52, 72, 16, 0, Math.PI * 2);
+      ctx.arc(CANVAS_WIDTH - 52, 72, 15, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     }
 
-    // 绘制漂浮白云 (高度与水平视差滚动)
+    // 绘制漂浮白云 (高度与水平视差滚动，自然有机造型)
     for (const c of this.clouds) {
       const renderX = c.x - this.cameraX * 0.15;
       const renderY = c.y - this.cameraY * 0.45;
       if (renderY > -60 && renderY < CANVAS_HEIGHT + 60) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${c.alpha})`;
-        ctx.beginPath();
-        ctx.roundRect(renderX, renderY, c.w, c.h, 12);
-        ctx.fill();
-        // 云朵小突起
-        ctx.beginPath();
-        ctx.arc(renderX + c.w * 0.35, renderY - 4, c.h * 0.55, 0, Math.PI * 2);
-        ctx.arc(renderX + c.w * 0.65, renderY - 2, c.h * 0.45, 0, Math.PI * 2);
-        ctx.fill();
+        this.drawOrganicCloud(ctx, renderX, renderY, c, sky.sunsetRatio, heightProgress);
       }
     }
+  }
+
+  // 绘制单体自然有机积云 (单一复合路径，彻底消除几何半透明重叠接缝)
+  drawOrganicCloud(ctx, x, y, c, sunsetRatio, progress) {
+    ctx.save();
+    ctx.globalAlpha = c.alpha;
+
+    const cx = x + c.w / 2;
+    const cy = y + c.h / 2;
+    const rBase = c.h;
+
+    // 单一连续封闭路径：完全由多个圆形弧线组合而成，绝无任何直线与硬平底
+    ctx.beginPath();
+    for (let i = 0; i < c.puffs.length; i++) {
+      const [dxRate, dyRate, rRate] = c.puffs[i];
+      const px = cx + dxRate * c.w;
+      const py = cy + dyRate * c.h;
+      const pr = rBase * rRate;
+      ctx.moveTo(px + pr, py);
+      ctx.arc(px, py, pr, 0, Math.PI * 2);
+    }
+
+    // 云朵垂直立体微渐变 (受环境天光与落日余晖润色)
+    const cloudGrad = ctx.createLinearGradient(0, cy - c.h * 0.8, 0, cy + c.h * 0.8);
+    if (progress > 1.2) {
+      cloudGrad.addColorStop(0, 'rgba(65, 80, 110, 0.85)');
+      cloudGrad.addColorStop(0.6, 'rgba(45, 56, 80, 0.82)');
+      cloudGrad.addColorStop(1, 'rgba(30, 38, 58, 0.78)');
+    } else if (sunsetRatio > 0.1) {
+      cloudGrad.addColorStop(0, 'rgba(255, 250, 242, 0.98)');
+      cloudGrad.addColorStop(0.5, 'rgba(255, 232, 220, 0.95)');
+      cloudGrad.addColorStop(1, 'rgba(235, 195, 185, 0.90)');
+    } else {
+      cloudGrad.addColorStop(0, '#ffffff');
+      cloudGrad.addColorStop(0.6, '#f3f8fc');
+      cloudGrad.addColorStop(1, '#d8e8f5');
+    }
+
+    ctx.fillStyle = cloudGrad;
+    ctx.fill();
+
+    ctx.restore();
   }
 
   // 绘制地面与远景天际线 (支持水平与垂直双向视差)
