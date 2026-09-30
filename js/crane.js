@@ -8,10 +8,10 @@ export class Crane {
     this.anchorX = canvasWidth / 2;
     this.anchorY = anchorY;
 
-    this.ropeLength = 145; // 还原原版标准吊索长度，保留充足垂直下落视距
+    this.ropeLength = 165; // 紧凑适中的摆动索长，紧密呼应下方建筑
     this.angle = 0;
     this.angularVelocity = 0;
-    this.maxAngle = 0.50; // 摆动最大角度 (~28度)
+    this.maxAngle = 0.48; // 摆动最大角度 (~27度)
     this.swingSpeed = 2.4; // 摆动角频率
     this.time = 0;
     this.hookRecoil = 0; // 脱钩后吊钩微弱弹升动效

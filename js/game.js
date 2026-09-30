@@ -262,8 +262,8 @@ export class Game {
     this.targetCameraX = topPos.x - (CANVAS_WIDTH / 2);
     this.cameraX += (this.targetCameraX - this.cameraX) * Math.min(1.0, dt * 3.2);
 
-    // 垂直跟随：大楼顶部表面保持在屏幕约 68% 高度处，为下落留出 130px+ 黄金视距
-    this.targetCameraY = topPos.y - (CANVAS_HEIGHT * 0.68);
+    // 垂直跟随：大楼顶部表面保持在屏幕约 57% 高度处，落差缩紧至 75px 左右，干脆利落直观
+    this.targetCameraY = topPos.y - (CANVAS_HEIGHT * 0.57);
     this.cameraY += (this.targetCameraY - this.cameraY) * Math.min(1.0, dt * 4.2);
   }
 
