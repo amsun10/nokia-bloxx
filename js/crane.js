@@ -66,8 +66,8 @@ export class Crane {
     };
   }
 
-  // 释放方块
-  releaseBlock() {
+  // 释放方块 (cameraY 转换为世界全局坐标)
+  releaseBlock(cameraY = 0) {
     if (!this.currentBlock || this.currentBlock.status !== 'hanging' || this.reloadCooldown > 0) {
       return null;
     }
@@ -76,11 +76,12 @@ export class Crane {
     const vx = this.angularVelocity * this.ropeLength * Math.cos(this.angle);
     
     const released = this.currentBlock;
-    released.release(hookPos.x, hookPos.y + 26, vx);
+    // 重要：hookPos.y 是屏幕坐标，释放进入物理世界需要加上 cameraY 才是世界坐标
+    released.release(hookPos.x, hookPos.y + 26 + cameraY, vx);
     
     this.currentBlock = null;
     this.isDropping = true;
-    this.reloadCooldown = 0.45; // 0.45秒后再准备生成下一层
+    this.reloadCooldown = 0.35; // 0.35秒装填冷却
 
     return released;
   }

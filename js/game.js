@@ -97,6 +97,12 @@ export class Game {
     this.wind = 0;
     this.targetWind = 0;
     this.windChangeTimer = 2.0;
+
+    this.emptyHookTimer = 0;
+    if (this.nextFloorTimer) {
+      clearTimeout(this.nextFloorTimer);
+      this.nextFloorTimer = null;
+    }
   }
 
   // 玩家按下下落按钮 (空格 / 5 / 触屏)
@@ -113,9 +119,10 @@ export class Game {
 
     if (this.state === 'PLAYING') {
       if (this.activeFallingBlock || !this.crane.currentBlock) {
-        return; // 已有正在下落的方块
+        return; // 已有正在下落的方块或未就绪
       }
-      const released = this.crane.releaseBlock();
+      // 将当前镜头偏移传入，精确转换到物理世界坐标系
+      const released = this.crane.releaseBlock(this.cameraY);
       if (released) {
         this.activeFallingBlock = released;
         audio.playDrop();
@@ -151,80 +158,96 @@ export class Game {
     const difficulty = 1.0 + Math.min(2.0, this.tower.getFloorCount() * 0.05);
     this.crane.update(dt, difficulty, this.wind);
 
-    // 5. 更新下落中的方块
+    // 5. 更新下落中的方块与碰撞检测
     if (this.activeFallingBlock) {
       this.activeFallingBlock.update(dt, this.wind);
 
-      // 检测碰撞
-      const result = this.tower.checkLanding(this.activeFallingBlock);
-      if (result) {
-        const topPos = this.tower.getTopSurfacePosition();
+      // 仅处于下落状态时检测着陆碰撞 (翻滚中不重复判定)
+      if (this.activeFallingBlock.status === 'falling') {
+        const result = this.tower.checkLanding(this.activeFallingBlock);
+        if (result) {
+          const topPos = this.tower.getTopSurfacePosition();
 
-        if (result.type === 'perfect') {
-          audio.playLand(1.0);
-          audio.playPerfect(result.combo);
-          this.particles.spawnCelebration(topPos.x, topPos.y, result.combo);
-          this.particles.spawnDust(topPos.x, topPos.y, 14);
-          this.particles.shake(4, 0.18);
+          if (result.type === 'perfect') {
+            audio.playLand(1.0);
+            audio.playPerfect(result.combo);
+            this.particles.spawnCelebration(topPos.x, topPos.y, result.combo);
+            this.particles.spawnDust(topPos.x, topPos.y, 14);
+            this.particles.shake(4, 0.18);
 
-          const comboTxt = result.combo > 1 ? `PERFECT x${result.combo}!` : 'PERFECT!';
-          this.particles.addFloatingText(comboTxt, topPos.x, topPos.y - 10, '#f1c40f', `+${result.popGained} POP`);
-          this.activeFallingBlock = null;
+            const comboTxt = result.combo > 1 ? `PERFECT x${result.combo}!` : 'PERFECT!';
+            this.particles.addFloatingText(comboTxt, topPos.x, topPos.y - 10, '#f1c40f', `+${result.popGained} POP`);
+            this.activeFallingBlock = null;
 
-          // 准备下一层
-          this.prepareNextFloor();
-        } else if (result.type === 'good' || result.type === 'ok') {
-          audio.playLand(0.8);
-          audio.playWobble();
-          this.particles.spawnDust(topPos.x, topPos.y, 8);
-          this.particles.shake(result.type === 'good' ? 5 : 8, 0.22);
+            // 准备下一层
+            this.prepareNextFloor(300);
+          } else if (result.type === 'good' || result.type === 'ok') {
+            audio.playLand(0.8);
+            audio.playWobble();
+            this.particles.spawnDust(topPos.x, topPos.y, 8);
+            this.particles.shake(result.type === 'good' ? 5 : 8, 0.22);
 
-          const ratingTxt = result.type === 'good' ? 'GOOD' : 'OK';
-          const ratingColor = result.type === 'good' ? '#2ecc71' : '#e67e22';
-          this.particles.addFloatingText(ratingTxt, topPos.x, topPos.y - 10, ratingColor, `+${result.popGained} POP`);
-          this.activeFallingBlock = null;
+            const ratingTxt = result.type === 'good' ? 'GOOD' : 'OK';
+            const ratingColor = result.type === 'good' ? '#2ecc71' : '#e67e22';
+            this.particles.addFloatingText(ratingTxt, topPos.x, topPos.y - 10, ratingColor, `+${result.popGained} POP`);
+            this.activeFallingBlock = null;
 
-          this.prepareNextFloor();
-        } else if (result.type === 'miss') {
-          // 严重错位滑脱
-          audio.playMiss();
-          this.particles.shake(12, 0.35);
-          this.particles.addFloatingText('MISS!', topPos.x, topPos.y - 10, '#e74c3c', '-1 LIFE');
+            this.prepareNextFloor(300);
+          } else if (result.type === 'miss') {
+            // 严重错位脱靶
+            audio.playMiss();
+            this.particles.shake(12, 0.35);
+            this.particles.addFloatingText('MISS!', topPos.x, topPos.y - 10, '#e74c3c', '-1 LIFE');
 
-          this.lives--;
-          if (this.lives <= 0) {
-            this.handleGameOver();
-          } else {
-            // 方块继续滑落，同时稍后装填新方块
-            setTimeout(() => {
-              if (this.state === 'PLAYING') {
-                this.activeFallingBlock = null;
-                this.crane.spawnBlock(this.tower.getFloorCount() + 1);
-              }
-            }, 600);
+            this.lives--;
+            if (this.lives <= 0) {
+              this.handleGameOver();
+            } else {
+              // 错位脱靶后，保证吊钩装填下一层方块
+              this.prepareNextFloor(500);
+            }
           }
         }
       }
 
-      // 方块跌出屏幕外检测
+      // 方块跌出屏幕外检测与清理
       if (this.activeFallingBlock && this.activeFallingBlock.y - this.cameraY > CANVAS_HEIGHT + 150) {
         this.activeFallingBlock = null;
+        if (this.state === 'PLAYING' && !this.crane.currentBlock) {
+          this.prepareNextFloor(200);
+        }
       }
     }
 
-    // 6. 镜头平滑跟踪大楼顶部
+    // 6. 安全看门狗 (Safety Watchdog):
+    // 若游戏中既无挂载方块也无下落方块且冷却完毕，0.4秒内自动补填，彻底解决吊钩空转问题
+    if (!this.crane.currentBlock && !this.activeFallingBlock && this.crane.reloadCooldown <= 0) {
+      this.emptyHookTimer = (this.emptyHookTimer || 0) + dt;
+      if (this.emptyHookTimer > 0.4) {
+        this.prepareNextFloor(0);
+        this.emptyHookTimer = 0;
+      }
+    } else {
+      this.emptyHookTimer = 0;
+    }
+
+    // 7. 镜头平滑跟踪大楼顶部
     const topBlock = this.tower.getTopBlock();
     // 保持大楼顶部大约在屏幕中央偏下位置 (约 62% 高度处)
     this.targetCameraY = topBlock.y - (CANVAS_HEIGHT * 0.62);
     this.cameraY += (this.targetCameraY - this.cameraY) * Math.min(1.0, dt * 4.5);
   }
 
-  prepareNextFloor() {
-    setTimeout(() => {
-      if (this.state === 'PLAYING') {
+  prepareNextFloor(delay = 300) {
+    if (this.nextFloorTimer) {
+      clearTimeout(this.nextFloorTimer);
+    }
+    this.nextFloorTimer = setTimeout(() => {
+      if (this.state === 'PLAYING' && !this.crane.currentBlock) {
         this.crane.spawnBlock(this.tower.getFloorCount() + 1);
       }
-    }, 350);
+      this.nextFloorTimer = null;
+    }, delay);
   }
 
   handleGameOver() {

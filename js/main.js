@@ -48,21 +48,28 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   applySettings();
 
-  // 绑定顶部工具栏
-  toggleFrameBtn.addEventListener('click', () => {
+  // 绑定顶部工具栏 (阻断冒泡，避免误触画布掉落)
+  [toggleFrameBtn, toggleSoundBtn, toggleBgmBtn].forEach(btn => {
+    btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+  });
+
+  toggleFrameBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     isPhoneFrame = !isPhoneFrame;
     storage.setSetting('phoneFrame', isPhoneFrame);
     applySettings();
   });
 
-  toggleSoundBtn.addEventListener('click', () => {
+  toggleSoundBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     audio.init();
     isMuted = audio.toggleMute();
     storage.setSetting('muted', isMuted);
     applySettings();
   });
 
-  toggleBgmBtn.addEventListener('click', () => {
+  toggleBgmBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     audio.init();
     isBgmOn = audio.toggleBgm();
     storage.setSetting('bgm', isBgmOn);

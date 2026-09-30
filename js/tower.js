@@ -76,22 +76,30 @@ export class Tower {
 
   // 判定掉落方块的着陆对齐情况
   checkLanding(fallingBlock) {
-    const topPos = this.getTopSurfacePosition();
-    const blockBottomY = fallingBlock.y + BLOCK_HEIGHT / 2;
+    if (fallingBlock.status !== 'falling') return null;
 
-    // 检测垂直碰撞 (下边缘触及或穿过上一层的上边缘)
-    if (blockBottomY >= topPos.y && fallingBlock.y < topPos.y + BLOCK_HEIGHT / 2) {
+    const topPos = this.getTopSurfacePosition();
+    const prevBottomY = (fallingBlock.prevY ?? fallingBlock.y) + BLOCK_HEIGHT / 2;
+    const currentBottomY = fallingBlock.y + BLOCK_HEIGHT / 2;
+
+    // 连续碰撞检测 (Continuous Collision Detection):
+    // 1. 上一帧在目标表面之上 (或刚好触碰)，且当前帧到达或越过了目标表面
+    const crossedSurface = prevBottomY <= topPos.y + 4 && currentBottomY >= topPos.y;
+    // 2. 容错近距范围 (防止初始帧异常)
+    const inSurfaceRange = currentBottomY >= topPos.y && fallingBlock.y < topPos.y + BLOCK_HEIGHT * 0.8;
+
+    if (crossedSurface || inSurfaceRange) {
       const deltaX = fallingBlock.x - topPos.x;
       const absDelta = Math.abs(deltaX);
 
-      // 1. 完美判定 (Perfect!) - 偏差小于等于 5 像素
-      if (absDelta <= 5) {
+      // 1. 完美判定 (Perfect!) - 偏差小于等于 6 像素
+      if (absDelta <= 6) {
         this.combo++;
         if (this.combo > this.maxCombo) this.maxCombo = this.combo;
 
         // 完美对齐极大吸收晃动能量，稳定大楼
-        this.swayVelocity *= 0.15;
-        this.swayAngle *= 0.2;
+        this.swayVelocity *= 0.12;
+        this.swayAngle *= 0.15;
 
         const popBonus = 100 + (this.combo - 1) * 50;
         this.population += popBonus;

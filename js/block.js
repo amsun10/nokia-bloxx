@@ -12,6 +12,7 @@ export class Block {
     
     this.x = 0;
     this.y = 0;
+    this.prevY = 0; // 上一帧 Y 坐标，用于连续碰撞穿透检测
     this.vx = 0;
     this.vy = 0;
     this.rotation = 0;
@@ -33,6 +34,7 @@ export class Block {
   release(initialX, initialY, initialVx) {
     this.x = initialX;
     this.y = initialY;
+    this.prevY = initialY;
     this.vx = initialVx * 0.7; // 继承摆动线速度的一部分
     this.vy = 0.5;
     this.status = 'falling';
@@ -40,6 +42,7 @@ export class Block {
 
   update(dt, wind = 0) {
     if (this.status === 'falling') {
+      this.prevY = this.y;
       const gravity = 1200; // px/s^2
       this.vy += gravity * dt;
       this.x += (this.vx + wind * 20) * dt;
@@ -47,6 +50,7 @@ export class Block {
       // 微弱空气阻力水平旋转
       this.rotation = Math.sin(this.vy * 0.05) * 0.04;
     } else if (this.status === 'tumbling') {
+      this.prevY = this.y;
       // 错位坠毁滚落
       const gravity = 1400;
       this.vy += gravity * dt;
