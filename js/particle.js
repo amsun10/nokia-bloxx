@@ -63,6 +63,49 @@ export class ParticleSystem {
     }
   }
 
+  // 大楼倒塌碎石砖屑 (Concrete rubble & bricks)
+  spawnRubble(x, y, count = 16) {
+    const colors = ['#c0392b', '#d35400', '#7f8c8d', '#2c3e50', '#e67e22', '#95a5a6'];
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 60 + Math.random() * 160;
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 30,
+        y: y + (Math.random() - 0.5) * 20,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 60,
+        size: 3 + Math.random() * 5,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        alpha: 1.0,
+        decay: 0.6 + Math.random() * 0.6,
+        gravity: 800,
+        isRubble: true,
+        rotation: Math.random() * Math.PI,
+        rotSpeed: (Math.random() - 0.5) * 16
+      });
+    }
+  }
+
+  // 大楼崩塌漫天腾起烟尘 (Billowing smoke clouds)
+  spawnSmoke(x, y, count = 10) {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 20 + Math.random() * 60;
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 40,
+        y: y + (Math.random() - 0.5) * 20,
+        vx: Math.cos(angle) * speed,
+        vy: -20 - Math.random() * 45,
+        size: 10 + Math.random() * 14,
+        growth: 18 + Math.random() * 22,
+        color: ['#bdc3c7', '#d5dbdb', '#95a5a6', '#7f8c8d'][Math.floor(Math.random() * 4)],
+        alpha: 0.75,
+        decay: 0.45 + Math.random() * 0.35,
+        isSmoke: true
+      });
+    }
+  }
+
   // 添加浮动提示文本 (PERFECT! / GOOD / +150 Pop)
   addFloatingText(text, x, y, color = '#f1c40f', subText = '') {
     this.floatingTexts.push({
@@ -95,8 +138,11 @@ export class ParticleSystem {
       if (p.gravity) {
         p.vy += p.gravity * dt;
       }
-      if (p.isConfetti) {
+      if (p.isConfetti || p.isRubble) {
         p.rotation += p.rotSpeed * dt;
+      }
+      if (p.isSmoke && p.growth) {
+        p.size += p.growth * dt;
       }
       p.alpha -= p.decay * dt;
       if (p.alpha <= 0) {
@@ -144,6 +190,12 @@ export class ParticleSystem {
         ctx.translate(p.x, screenY);
         ctx.rotate(p.rotation);
         ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.6);
+        ctx.restore();
+      } else if (p.isRubble) {
+        ctx.save();
+        ctx.translate(p.x, screenY);
+        ctx.rotate(p.rotation);
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
         ctx.restore();
       } else {
         ctx.beginPath();

@@ -17,6 +17,7 @@ export class Tower {
     this.population = 0;
     this.combo = 0;
     this.maxCombo = 0;
+    this.isCollapsing = false;
 
     this.reset();
   }
@@ -28,6 +29,7 @@ export class Tower {
     this.population = 0;
     this.combo = 0;
     this.maxCombo = 0;
+    this.isCollapsing = false;
 
     // 放置最底部的基座大堂
     const foundation = new Block('foundation', 0);
@@ -59,11 +61,82 @@ export class Tower {
     };
   }
 
-  // 物理更新（阻尼振动方程）
-  update(dt, wind = 0) {
-    // 质心恢复力加速度 = -k * angle - c * v + 外力(风力微扰)
+  // 触发大楼倒塌灾难特效
+  triggerCollapse(particles = null) {
+    this.isCollapsing = true;
+    // 依据当前大楼摆动倾斜方向，决定主倒塌方向
+    const dir = this.swayAngle > 0.02 ? 1 : (this.swayAngle < -0.02 ? -1 : (Math.random() > 0.5 ? 1 : -1));
+
     const count = this.blocks.length;
-    // 楼层越高，摆动周期略长，晃动更灵敏
+    for (let i = 0; i < count; i++) {
+      const b = this.blocks[i];
+      b.isCollapsing = true;
+      // 从顶层到底层连锁崩塌 (顶层最先失衡滑落)
+      const reverseIdx = count - 1 - i;
+      b.collapseDelay = reverseIdx * 0.06;
+      // 横向爆发冲量与高空离心力
+      const heightRatio = (i + 1) / count;
+      b.collapseVx = dir * (60 + Math.random() * 90 * heightRatio) + (Math.random() - 0.5) * 40;
+      b.collapseVy = -(30 + Math.random() * 80 * heightRatio); // 初始轻微向上掀起
+      b.collapseVRot = dir * (1.8 + Math.random() * 3.2 * heightRatio);
+      b.collapseGravity = 1100 + Math.random() * 200;
+      b.hasHitGround = false;
+    }
+
+    if (particles) {
+      particles.shake(14, 2.2);
+    }
+  }
+
+  // 物理更新（阻尼振动方程 / 倒塌独立刚体模拟）
+  update(dt, wind = 0, particles = null) {
+    if (this.isCollapsing) {
+      const count = this.blocks.length;
+      for (let i = 0; i < count; i++) {
+        const b = this.blocks[i];
+        if (!b.isCollapsing) continue;
+
+        if (b.collapseDelay > 0) {
+          b.collapseDelay -= dt;
+          // 倾覆延迟期间整楼加剧倾斜颤抖
+          b.rotation += this.swayAngle * dt * 3.0;
+          continue;
+        }
+
+        // 重力下坠与飞散
+        b.collapseVy += b.collapseGravity * dt;
+        b.x += b.collapseVx * dt;
+        b.y += b.collapseVy * dt;
+        b.rotation += b.collapseVRot * dt;
+
+        // 触及地面碰撞与碎裂
+        const groundContactY = this.groundY - BLOCK_HEIGHT / 2;
+        if (b.y >= groundContactY) {
+          b.y = groundContactY;
+          b.collapseVy = -b.collapseVy * 0.2; // 触地轻微弹跳
+          b.collapseVx *= 0.6;
+          b.collapseVRot *= 0.45;
+
+          if (!b.hasHitGround) {
+            b.hasHitGround = true;
+            if (particles) {
+              particles.spawnDust(b.x, b.y, 16);
+              particles.spawnRubble(b.x, b.y, 14);
+              particles.spawnSmoke(b.x, b.y, 6);
+            }
+          }
+        }
+
+        // 下落途中随机冒出断裂碎屑烟雾
+        if (Math.random() < 0.22 && particles) {
+          particles.spawnSmoke(b.x, b.y, 1);
+        }
+      }
+      return;
+    }
+
+    // 正常状态：质心恢复力加速度 = -k * angle - c * v + 外力(风力微扰)
+    const count = this.blocks.length;
     const effectiveStiffness = Math.max(3.5, this.swayStiffness - count * 0.12);
     const acceleration = -effectiveStiffness * this.swayAngle - this.swayDamping * this.swayVelocity + (wind * 0.08);
 
@@ -168,6 +241,19 @@ export class Tower {
 
   draw(ctx, cameraY) {
     const count = this.blocks.length;
+
+    // 倒塌特效状态下的独立刚体自由翻滚渲染
+    if (this.isCollapsing) {
+      for (let i = 0; i < count; i++) {
+        const block = this.blocks[i];
+        const renderX = block.x;
+        const renderY = block.y - cameraY;
+        if (renderY > -100 && renderY < ctx.canvas.height + 100) {
+          block.draw(ctx, renderX, renderY, 0);
+        }
+      }
+      return;
+    }
 
     // 从底部到顶部依次绘制所有楼层
     for (let i = 0; i < count; i++) {

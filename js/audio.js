@@ -232,6 +232,58 @@ class AudioManager {
     }
   }
 
+  // 大楼倾覆轰鸣与连续碎裂撞击音效
+  playCollapse() {
+    if (this.isMuted || !this.ctx) return;
+    try {
+      const now = this.ctx.currentTime;
+      // 1. 低频地震轰鸣 (Deep Earthquake Rumble)
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(65, now);
+      osc.frequency.exponentialRampToValueAtTime(25, now + 2.2);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(220, now);
+      filter.frequency.linearRampToValueAtTime(70, now + 2.2);
+
+      gain.gain.setValueAtTime(0.45, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 2.2);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now);
+      osc.stop(now + 2.3);
+
+      // 2. 连续建筑砖石崩解撞击音 (Staggered Cracks & Crashes)
+      for (let i = 0; i < 5; i++) {
+        const crackTime = now + 0.15 + i * 0.32 + Math.random() * 0.1;
+        const cOsc = this.ctx.createOscillator();
+        const cGain = this.ctx.createGain();
+
+        cOsc.type = 'triangle';
+        cOsc.frequency.setValueAtTime(140 - i * 18, crackTime);
+        cOsc.frequency.exponentialRampToValueAtTime(32, crackTime + 0.4);
+
+        cGain.gain.setValueAtTime(0.32, crackTime);
+        cGain.gain.exponentialRampToValueAtTime(0.001, crackTime + 0.4);
+
+        cOsc.connect(cGain);
+        cGain.connect(this.masterGain);
+
+        cOsc.start(crackTime);
+        cOsc.stop(crackTime + 0.42);
+      }
+    } catch (e) {
+      console.warn('Audio error', e);
+    }
+  }
+
   // 游戏结束旋律
   playGameOver() {
     if (this.isMuted || !this.ctx) return;

@@ -151,6 +151,21 @@ export class Game {
     // 3. 更新粒子系统
     this.particles.update(dt);
 
+    // 倒塌过场状态分支
+    if (this.state === 'COLLAPSING') {
+      this.collapseDuration -= dt;
+      this.tower.update(dt, this.wind, this.particles);
+
+      // 镜头平滑下移跟踪坠落大楼到地面
+      const groundScreenY = (CANVAS_HEIGHT - 60) - (CANVAS_HEIGHT * 0.7);
+      this.cameraY += (groundScreenY - this.cameraY) * Math.min(1.0, dt * 2.5);
+
+      if (this.collapseDuration <= 0) {
+        this.handleGameOver();
+      }
+      return;
+    }
+
     if (this.state !== 'PLAYING') return;
 
     // 4. 更新大楼物理与起重机
@@ -201,7 +216,8 @@ export class Game {
 
             this.lives--;
             if (this.lives <= 0) {
-              this.handleGameOver();
+              // 触发大楼轰然倒塌特效，不再直接弹窗结束
+              this.startCollapse();
             } else {
               // 错位脱靶后，保证吊钩装填下一层方块
               this.prepareNextFloor(500);
@@ -238,6 +254,17 @@ export class Game {
     this.cameraY += (this.targetCameraY - this.cameraY) * Math.min(1.0, dt * 4.5);
   }
 
+  // 启动大楼轰鸣倒塌过场特效
+  startCollapse() {
+    this.state = 'COLLAPSING';
+    this.collapseDuration = 2.8; // 2.8秒物理崩塌与尘暴过场
+    this.activeFallingBlock = null;
+
+    audio.stopBgm();
+    audio.playCollapse();
+    this.tower.triggerCollapse(this.particles);
+  }
+
   prepareNextFloor(delay = 300) {
     if (this.nextFloorTimer) {
       clearTimeout(this.nextFloorTimer);
@@ -253,7 +280,6 @@ export class Game {
   handleGameOver() {
     this.state = 'GAMEOVER';
     audio.playGameOver();
-    audio.stopBgm();
 
     const floors = this.tower.getFloorCount();
     const pop = this.tower.population;
@@ -451,6 +477,19 @@ export class Game {
         ctx.font = 'bold 11px monospace';
         ctx.fillText(`COMBO x${this.tower.combo}`, 14, 53);
       }
+    } else if (this.state === 'COLLAPSING') {
+      // 倒塌红色警报呼吸浮层
+      const pulse = (Math.sin(Date.now() * 0.015) + 1) * 0.5;
+      ctx.fillStyle = `rgba(239, 68, 68, ${0.12 + pulse * 0.16})`;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+      ctx.fillRect(0, 0, CANVAS_WIDTH, 32);
+
+      ctx.fillStyle = '#ef4444';
+      ctx.font = '900 13px "Courier New", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠️ 大楼失衡崩解倒塌中...! ⚠️', CANVAS_WIDTH / 2, 21);
     } else if (this.state === 'MENU') {
       this.drawMenuScreen(ctx);
     } else if (this.state === 'GAMEOVER') {
