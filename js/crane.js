@@ -3,15 +3,15 @@
 import { Block } from './block.js';
 
 export class Crane {
-  constructor(canvasWidth, anchorY = 30) {
+  constructor(canvasWidth, anchorY = 22) {
     this.canvasWidth = canvasWidth;
     this.anchorX = canvasWidth / 2;
     this.anchorY = anchorY;
 
-    this.ropeLength = 170; // 吊索标准长度
+    this.ropeLength = 145; // 还原原版标准吊索长度，保留充足垂直下落视距
     this.angle = 0;
     this.angularVelocity = 0;
-    this.maxAngle = 0.52; // 摆动最大角度 (~30度)
+    this.maxAngle = 0.50; // 摆动最大角度 (~28度)
     this.swingSpeed = 2.4; // 摆动角频率
     this.time = 0;
     this.hookRecoil = 0; // 脱钩后吊钩微弱弹升动效
@@ -86,8 +86,8 @@ export class Crane {
     };
   }
 
-  // 释放方块 (cameraY 转换为世界全局坐标，物理姿态平滑过渡)
-  releaseBlock(cameraY = 0) {
+  // 释放方块 (cameraX, cameraY 转换为世界物理全局坐标)
+  releaseBlock(cameraX = 0, cameraY = 0) {
     if (!this.currentBlock || this.currentBlock.status !== 'hanging' || this.reloadCooldown > 0) {
       return null;
     }
@@ -97,8 +97,8 @@ export class Crane {
     const vx = this.angularVelocity * effectiveRadius * Math.cos(this.angle);
     
     const released = this.currentBlock;
-    // 传入当前绝对几何坐标、速度与初始摆角，彻底消除任何位置与角度突跳
-    released.release(blockPos.x, blockPos.y + cameraY, vx, this.angle, this.angularVelocity);
+    // 叠加镜头水平与垂直偏移，精准转换到世界物理空间
+    released.release(blockPos.x + cameraX, blockPos.y + cameraY, vx, this.angle, this.angularVelocity);
     
     // 起重机吊钩脱载卸力微弹动画 (-6px 向上自然微缩后复位)
     this.hookRecoil = -6;

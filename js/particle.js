@@ -176,7 +176,7 @@ export class ParticleSystem {
     };
   }
 
-  draw(ctx, cameraY) {
+  draw(ctx, cameraX = 0, cameraY = 0) {
     ctx.save();
 
     // 绘制粒子
@@ -184,22 +184,23 @@ export class ParticleSystem {
       ctx.globalAlpha = Math.max(0, p.alpha);
       ctx.fillStyle = p.color;
 
+      const screenX = p.x - cameraX;
       const screenY = p.y - cameraY;
       if (p.isConfetti) {
         ctx.save();
-        ctx.translate(p.x, screenY);
+        ctx.translate(screenX, screenY);
         ctx.rotate(p.rotation);
         ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.6);
         ctx.restore();
       } else if (p.isRubble) {
         ctx.save();
-        ctx.translate(p.x, screenY);
+        ctx.translate(screenX, screenY);
         ctx.rotate(p.rotation);
         ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
         ctx.restore();
       } else {
         ctx.beginPath();
-        ctx.arc(p.x, screenY, p.size, 0, Math.PI * 2);
+        ctx.arc(screenX, screenY, p.size, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -210,8 +211,9 @@ export class ParticleSystem {
     for (const t of this.floatingTexts) {
       ctx.globalAlpha = Math.max(0, t.alpha);
       ctx.save();
+      const screenX = t.x - cameraX;
       const screenY = t.y - cameraY;
-      ctx.translate(t.x, screenY);
+      ctx.translate(screenX, screenY);
       ctx.scale(t.scale, t.scale);
 
       // 文本黑色硬描边 (经典像素游戏描边)

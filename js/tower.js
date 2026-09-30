@@ -239,14 +239,14 @@ export class Tower {
     this.blocks.push(block);
   }
 
-  draw(ctx, cameraY) {
+  draw(ctx, cameraX = 0, cameraY = 0) {
     const count = this.blocks.length;
 
     // 倒塌特效状态下的独立刚体自由翻滚渲染
     if (this.isCollapsing) {
       for (let i = 0; i < count; i++) {
         const block = this.blocks[i];
-        const renderX = block.x;
+        const renderX = block.x - cameraX;
         const renderY = block.y - cameraY;
         if (renderY > -100 && renderY < ctx.canvas.height + 100) {
           block.draw(ctx, renderX, renderY, 0);
@@ -264,7 +264,7 @@ export class Tower {
       const currentFloorAngle = this.swayAngle * (heightRatio * 0.9);
       const swayOffset = Math.sin(this.swayAngle) * (i * BLOCK_HEIGHT * 0.65);
 
-      const renderX = block.x + swayOffset;
+      const renderX = block.x + swayOffset - cameraX;
       const renderY = block.y - cameraY;
 
       // 仅在可视视野范围内的楼层进行细致渲染优化

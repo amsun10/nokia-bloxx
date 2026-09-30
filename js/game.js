@@ -23,14 +23,16 @@ export class Game {
     this.lives = 3;
     this.maxLives = 3;
 
-    // 镜头相机
+    // 镜头相机 (XY 双向平滑跟随，保证大楼顶部落点永远居中，绝不移出屏幕)
+    this.cameraX = 0;
+    this.targetCameraX = 0;
     this.cameraY = 0;
     this.targetCameraY = 0;
 
     // 实体系统
     const groundY = CANVAS_HEIGHT - 60;
     this.tower = new Tower(CANVAS_WIDTH / 2, groundY);
-    this.crane = new Crane(CANVAS_WIDTH, 45);
+    this.crane = new Crane(CANVAS_WIDTH, 22);
     this.particles = new ParticleSystem();
     this.activeFallingBlock = null;
 
@@ -54,7 +56,7 @@ export class Game {
     this.clouds = [];
     for (let i = 0; i < 9; i++) {
       this.clouds.push({
-        x: Math.random() * CANVAS_WIDTH,
+        x: Math.random() * (CANVAS_WIDTH + 200) - 100,
         y: -i * 180 + 100, // 分布在不同高度层
         speed: 12 + Math.random() * 20,
         w: 50 + Math.random() * 50,
@@ -92,6 +94,8 @@ export class Game {
     this.crane.reset(1);
     this.particles.reset();
 
+    this.cameraX = 0;
+    this.targetCameraX = 0;
     this.cameraY = 0;
     this.targetCameraY = 0;
     this.wind = 0;
@@ -117,12 +121,16 @@ export class Game {
       return;
     }
 
+    if (this.state === 'COLLAPSING') {
+      return; // 倒塌特效期间禁止投掷
+    }
+
     if (this.state === 'PLAYING') {
       if (this.activeFallingBlock || !this.crane.currentBlock) {
         return; // 已有正在下落的方块或未就绪
       }
-      // 将当前镜头偏移传入，精确转换到物理世界坐标系
-      const released = this.crane.releaseBlock(this.cameraY);
+      // 将当前镜头水平与垂直偏移传入，精确转换到物理世界绝对坐标系
+      const released = this.crane.releaseBlock(this.cameraX, this.cameraY);
       if (released) {
         this.activeFallingBlock = released;
         audio.playDrop();
@@ -247,11 +255,16 @@ export class Game {
       this.emptyHookTimer = 0;
     }
 
-    // 7. 镜头平滑跟踪大楼顶部
-    const topBlock = this.tower.getTopBlock();
-    // 保持大楼顶部大约在屏幕中央偏下位置 (约 62% 高度处)
-    this.targetCameraY = topBlock.y - (CANVAS_HEIGHT * 0.62);
-    this.cameraY += (this.targetCameraY - this.cameraY) * Math.min(1.0, dt * 4.5);
+    // 7. 镜头双向智能跟随 (X 轴水平对齐居中 + Y 轴垂直升降)
+    const topPos = this.tower.getTopSurfacePosition();
+    // 水平跟随：大楼顶部目标着陆表面永远平滑居中在画布中轴 (CANVAS_WIDTH / 2)！
+    // 无论大楼如何偏心堆叠或倾斜，下一块方块永远精准在视线正中央！
+    this.targetCameraX = topPos.x - (CANVAS_WIDTH / 2);
+    this.cameraX += (this.targetCameraX - this.cameraX) * Math.min(1.0, dt * 3.2);
+
+    // 垂直跟随：大楼顶部表面保持在屏幕约 68% 高度处，为下落留出 130px+ 黄金视距
+    this.targetCameraY = topPos.y - (CANVAS_HEIGHT * 0.68);
+    this.cameraY += (this.targetCameraY - this.cameraY) * Math.min(1.0, dt * 4.2);
   }
 
   // 启动大楼轰鸣倒塌过场特效
@@ -298,26 +311,26 @@ export class Game {
     // 1. 动态渐变天空与背景层
     this.drawSkyBackground(ctx);
 
-    // 2. 远景地平线与城市天际线 (根据镜头高度移动视差)
+    // 2. 远景地平线与城市天际线 (根据镜头高度与水平移动视差)
     this.drawParallaxCity(ctx);
 
     // 3. 绘制大楼本体
-    this.tower.draw(ctx, this.cameraY);
+    this.tower.draw(ctx, this.cameraX, this.cameraY);
 
     // 4. 绘制正在掉落的方块
     if (this.activeFallingBlock) {
       this.activeFallingBlock.draw(
         ctx,
-        this.activeFallingBlock.x,
+        this.activeFallingBlock.x - this.cameraX,
         this.activeFallingBlock.y - this.cameraY
       );
     }
 
-    // 5. 绘制吊车起重机 (起重机固定在顶部，不随普通镜头完全卷走)
+    // 5. 绘制吊车起重机 (起重机固定在顶部中央，正对大楼顶部落点)
     this.crane.draw(ctx);
 
     // 6. 绘制粒子与浮动反馈
-    this.particles.draw(ctx, this.cameraY);
+    this.particles.draw(ctx, this.cameraX, this.cameraY);
 
     // 7. 绘制游戏 HUD 顶栏与状态界面
     this.drawHUD(ctx);
@@ -373,70 +386,76 @@ export class Game {
       ctx.fill();
     }
 
-    // 绘制漂浮白云 (视差滚动)
+    // 绘制漂浮白云 (高度与水平视差滚动)
     for (const c of this.clouds) {
+      const renderX = c.x - this.cameraX * 0.15;
       const renderY = c.y - this.cameraY * 0.45;
       if (renderY > -60 && renderY < CANVAS_HEIGHT + 60) {
         ctx.fillStyle = `rgba(255, 255, 255, ${c.alpha})`;
         ctx.beginPath();
-        ctx.roundRect(c.x, renderY, c.w, c.h, 12);
+        ctx.roundRect(renderX, renderY, c.w, c.h, 12);
         ctx.fill();
         // 云朵小突起
         ctx.beginPath();
-        ctx.arc(c.x + c.w * 0.35, renderY - 4, c.h * 0.55, 0, Math.PI * 2);
-        ctx.arc(c.x + c.w * 0.65, renderY - 2, c.h * 0.45, 0, Math.PI * 2);
+        ctx.arc(renderX + c.w * 0.35, renderY - 4, c.h * 0.55, 0, Math.PI * 2);
+        ctx.arc(renderX + c.w * 0.65, renderY - 2, c.h * 0.45, 0, Math.PI * 2);
         ctx.fill();
       }
     }
   }
 
-  // 绘制地面与远景天际线
+  // 绘制地面与远景天际线 (支持水平与垂直双向视差)
   drawParallaxCity(ctx) {
     const groundScreenY = (CANVAS_HEIGHT - 60) - this.cameraY;
 
     // 仅当地面在视口附近时绘制
     if (groundScreenY > -200) {
-      // 1. 远景灰蓝楼宇剪影 (慢速视差)
-      const distantY = groundScreenY - 140;
+      // 1. 远景灰蓝楼宇剪影 (慢速视差循环滚动)
       ctx.fillStyle = '#7fb3d5';
       const buildingWidths = [35, 45, 28, 55, 32, 40, 50, 36, 44, 40];
-      let curX = 0;
-      for (let i = 0; i < buildingWidths.length; i++) {
-        const bw = buildingWidths[i];
-        const bh = 80 + (i % 4) * 35;
-        ctx.fillRect(curX, groundScreenY - bh, bw - 2, bh);
-        curX += bw;
+      const totalCityW = buildingWidths.reduce((a, b) => a + b, 0);
+      const parallaxShiftX = ((this.cameraX * 0.25) % totalCityW + totalCityW) % totalCityW;
+      for (let rep = -1; rep <= 2; rep++) {
+        let curX = rep * totalCityW - parallaxShiftX;
+        for (let i = 0; i < buildingWidths.length; i++) {
+          const bw = buildingWidths[i];
+          const bh = 80 + (i % 4) * 35;
+          ctx.fillRect(curX, groundScreenY - bh, bw - 2, bh);
+          curX += bw;
+        }
       }
 
-      // 2. 近景绿地草坪（无缝紧贴大楼地基底部 groundScreenY）
+      // 2. 近景绿地草坪（无限延伸，无缝紧贴大楼地基底部 groundScreenY）
       ctx.fillStyle = '#27ae60';
-      ctx.fillRect(0, groundScreenY, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.fillRect(-1500, groundScreenY, CANVAS_WIDTH + 3000, CANVAS_HEIGHT);
       ctx.fillStyle = '#2ecc71';
-      ctx.fillRect(0, groundScreenY, CANVAS_WIDTH, 4);
+      ctx.fillRect(-1500, groundScreenY, CANVAS_WIDTH + 3000, 4);
 
-      // 大楼正门前大理石迎宾铺地与台阶
+      // 大楼正门前大理石迎宾铺地与台阶 (世界坐标锚定)
       const hotelW = 126;
+      const hotelScreenX = this.tower.baseX - this.cameraX;
       ctx.fillStyle = '#95a5a6';
-      ctx.fillRect((CANVAS_WIDTH - hotelW) / 2, groundScreenY, hotelW, 16);
+      ctx.fillRect(hotelScreenX - hotelW / 2, groundScreenY, hotelW, 16);
       ctx.fillStyle = '#7f8c8d';
-      ctx.fillRect((CANVAS_WIDTH - hotelW) / 2, groundScreenY + 4, hotelW, 1);
-      ctx.fillRect((CANVAS_WIDTH - hotelW) / 2, groundScreenY + 9, hotelW, 1);
+      ctx.fillRect(hotelScreenX - hotelW / 2, groundScreenY + 4, hotelW, 1);
+      ctx.fillRect(hotelScreenX - hotelW / 2, groundScreenY + 9, hotelW, 1);
 
       // 地面沥青公路
       ctx.fillStyle = '#34495e';
-      ctx.fillRect(0, groundScreenY + 18, CANVAS_WIDTH, 42);
+      ctx.fillRect(-1500, groundScreenY + 18, CANVAS_WIDTH + 3000, 42);
       // 马路路沿石 (Curbs)
       ctx.fillStyle = '#bdc3c7';
-      ctx.fillRect(0, groundScreenY + 16, CANVAS_WIDTH, 2);
+      ctx.fillRect(-1500, groundScreenY + 16, CANVAS_WIDTH + 3000, 2);
 
       // 公路白色交通标线
       ctx.fillStyle = '#ecf0f1';
-      for (let x = 10; x < CANVAS_WIDTH; x += 30) {
+      for (let x = -1500; x < CANVAS_WIDTH + 1500; x += 30) {
         ctx.fillRect(x, groundScreenY + 36, 16, 3);
       }
 
-      // 地面小行道树（自然植根于草坪之上）
-      for (let tx of [26, 68, CANVAS_WIDTH - 68, CANVAS_WIDTH - 26]) {
+      // 地面小行道树（自然植根于草坪，锚定于大楼底座两侧世界坐标）
+      for (let offset of [-150, -100, 100, 150]) {
+        const tx = hotelScreenX + offset;
         // 树干
         ctx.fillStyle = '#795548';
         ctx.fillRect(tx - 3, groundScreenY - 18, 6, 20);
