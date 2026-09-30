@@ -14,6 +14,7 @@ export class Crane {
     this.maxAngle = 0.52; // 摆动最大角度 (~30度)
     this.swingSpeed = 2.4; // 摆动角频率
     this.time = 0;
+    this.hookRecoil = 0; // 脱钩后吊钩微弱弹升动效
 
     this.currentBlock = null;
     this.isDropping = false;
@@ -23,6 +24,7 @@ export class Crane {
   reset(floorNumber = 1) {
     this.time = 0;
     this.angle = 0;
+    this.hookRecoil = 0;
     this.isDropping = false;
     this.reloadCooldown = 0;
     this.spawnBlock(floorNumber);
@@ -45,40 +47,62 @@ export class Crane {
     // 近似角速度用于释放时的惯性传递
     this.angularVelocity = Math.cos(this.time) * this.maxAngle * this.swingSpeed;
 
+    // 吊钩脱载回缩微动平滑恢复
+    if (Math.abs(this.hookRecoil) > 0.05) {
+      this.hookRecoil *= Math.exp(-12.0 * dt);
+    } else {
+      this.hookRecoil = 0;
+    }
+
     // 更新装填冷却
     if (this.reloadCooldown > 0) {
       this.reloadCooldown -= dt;
     }
 
-    // 更新悬挂方块位置
+    // 更新悬挂方块位置 (沿摆角方向刚体延伸，确保吊钩与方块无缝嵌套)
     if (this.currentBlock && this.currentBlock.status === 'hanging') {
-      const hookPos = this.getHookPosition();
-      this.currentBlock.x = hookPos.x;
-      this.currentBlock.y = hookPos.y + 26; // 方块中心在吊钩下方
-      this.currentBlock.rotation = this.angle * 0.8;
+      const blockPos = this.getBlockCenterPosition();
+      this.currentBlock.x = blockPos.x;
+      this.currentBlock.y = blockPos.y;
+      this.currentBlock.rotation = this.angle;
     }
   }
 
   getHookPosition() {
+    const currentLength = this.ropeLength + this.hookRecoil;
     return {
-      x: this.anchorX + Math.sin(this.angle) * this.ropeLength,
-      y: this.anchorY + Math.cos(this.angle) * this.ropeLength
+      x: this.anchorX + Math.sin(this.angle) * currentLength,
+      y: this.anchorY + Math.cos(this.angle) * currentLength
     };
   }
 
-  // 释放方块 (cameraY 转换为世界全局坐标)
+  // 计算方块中心在吊钩下方的真实物理空间坐标
+  getBlockCenterPosition() {
+    const hookPos = this.getHookPosition();
+    const offsetDistance = 38; // 吊钩下沿到方块中心的几何轴向间距
+    return {
+      x: hookPos.x + Math.sin(this.angle) * offsetDistance,
+      y: hookPos.y + Math.cos(this.angle) * offsetDistance
+    };
+  }
+
+  // 释放方块 (cameraY 转换为世界全局坐标，物理姿态平滑过渡)
   releaseBlock(cameraY = 0) {
     if (!this.currentBlock || this.currentBlock.status !== 'hanging' || this.reloadCooldown > 0) {
       return null;
     }
 
-    const hookPos = this.getHookPosition();
-    const vx = this.angularVelocity * this.ropeLength * Math.cos(this.angle);
+    const blockPos = this.getBlockCenterPosition();
+    const effectiveRadius = this.ropeLength + 38;
+    const vx = this.angularVelocity * effectiveRadius * Math.cos(this.angle);
     
     const released = this.currentBlock;
-    // 重要：hookPos.y 是屏幕坐标，释放进入物理世界需要加上 cameraY 才是世界坐标
-    released.release(hookPos.x, hookPos.y + 26 + cameraY, vx);
+    // 传入当前绝对几何坐标、速度与初始摆角，彻底消除任何位置与角度突跳
+    released.release(blockPos.x, blockPos.y + cameraY, vx, this.angle, this.angularVelocity);
     
+    // 起重机吊钩脱载卸力微弹动画 (-6px 向上自然微缩后复位)
+    this.hookRecoil = -6;
+
     this.currentBlock = null;
     this.isDropping = true;
     this.reloadCooldown = 0.35; // 0.35秒装填冷却

@@ -30,13 +30,17 @@ export class Block {
     ];
   }
 
-  // 释放下落
-  release(initialX, initialY, initialVx) {
+  // 释放下落 (平滑物理参数传递)
+  release(initialX, initialY, initialVx, initialAngle = 0, initialAngularVelocity = 0) {
     this.x = initialX;
     this.y = initialY;
     this.prevY = initialY;
-    this.vx = initialVx * 0.7; // 继承摆动线速度的一部分
-    this.vy = 0.5;
+    this.vx = initialVx * 0.75; // 继承水平线速度
+    // 关键：给予即时明确的向下脱钩初速度 (75 px/s)，确保第一帧纯粹向下脱离，绝不向上微弹
+    this.vy = 75;
+    // 继承脱钩时的当前倾角与微弱旋转冲量
+    this.rotation = initialAngle;
+    this.vRotation = initialAngularVelocity * 0.25;
     this.status = 'falling';
   }
 
@@ -47,8 +51,11 @@ export class Block {
       this.vy += gravity * dt;
       this.x += (this.vx + wind * 20) * dt;
       this.y += this.vy * dt;
-      // 微弱空气阻力水平旋转
-      this.rotation = Math.sin(this.vy * 0.05) * 0.04;
+
+      // 自然平滑的空中姿态回正阻尼，消除任何角度突变
+      this.rotation += this.vRotation * dt;
+      this.rotation *= Math.exp(-3.5 * dt); // 优雅指数衰减回归水平
+      this.vRotation *= Math.exp(-2.5 * dt);
     } else if (this.status === 'tumbling') {
       this.prevY = this.y;
       // 错位坠毁滚落
@@ -84,8 +91,8 @@ export class Block {
       this.drawNormalFloor(ctx, -halfW, -halfH);
     }
 
-    // 绘制挂钩扣环（如果在悬挂中）
-    if (this.status === 'hanging') {
+    // 绘制挂钩扣环（在悬挂和下落飞行途中均保留，着陆后方拆除，消除突变空缺感）
+    if (this.status === 'hanging' || this.status === 'falling') {
       this.drawRoofHarness(ctx, -halfW, -halfH);
     }
 
@@ -265,14 +272,14 @@ export class Block {
     ctx.strokeStyle = '#bdc3c7';
     ctx.beginPath();
     ctx.moveTo(x + 14, y - 5);
-    ctx.lineTo(0, y - 22);
+    ctx.lineTo(0, y - 14);
     ctx.lineTo(x + w - 14, y - 5);
     ctx.stroke();
 
-    // 顶部挂钩圆环
+    // 顶部挂钩圆环 (精确扣合在吊钩内部)
     ctx.fillStyle = '#f1c40f';
     ctx.beginPath();
-    ctx.arc(0, y - 22, 5, 0, Math.PI * 2);
+    ctx.arc(0, y - 14, 4.5, 0, Math.PI * 2);
     ctx.stroke();
   }
 }
